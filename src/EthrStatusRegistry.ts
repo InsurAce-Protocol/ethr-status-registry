@@ -28,13 +28,18 @@ export const methodName = 'EthrStatusRegistry2019'
 export class EthrStatusRegistry implements StatusResolver {
   // look for ethereumAddress entries in didDoc
   static filterDocForAddresses(didDoc: DIDDocument): string[] {
-    const keyEntries: string[] = didDoc.publicKey
+    const keyEntries: string[] = didDoc.verificationMethod
       .filter(
-        (entry) => entry?.type === 'Secp256k1VerificationKey2018' && typeof entry?.ethereumAddress !== 'undefined'
+        (entry) => entry?.type === 'EcdsaSecp256k1RecoveryMethod2020' && typeof entry?.blockchainAccountId !== 'undefined'
       )
-      .map((entry) => entry?.ethereumAddress || '')
+      .map((entry) => {
+        if(entry?.blockchainAccountId) {
+          const ethAddress =  this.getEthereumAddress(entry.blockchainAccountId);
+          return ethAddress;
+        }
+        return '';
+      })
       .filter((address) => address !== '')
-
     return keyEntries
   }
 
@@ -51,7 +56,7 @@ export class EthrStatusRegistry implements StatusResolver {
   async checkStatus(credential: string, didDoc: DIDDocument): Promise<null | CredentialStatus> {
     const decodedJWT = decodeJWT(credential).payload as JWTDecodedExtended
 
-    const statusEntry = decodedJWT.credentialStatus
+    const statusEntry = decodedJWT.vc.credentialStatus
     if (!statusEntry) {
       return Promise.resolve({ status: 'NonRevocable' })
     }
@@ -117,6 +122,15 @@ export class EthrStatusRegistry implements StatusResolver {
       }
       return Promise.reject(e)
     }
+  }
+
+  static getEthereumAddress = (blockchainAccountId : string) => {
+    const tokens = blockchainAccountId.split(':');
+    const address = tokens[2];
+    if (tokens[0] === 'eip155'){
+      return address;
+    }
+    else return '';
   }
 
   private parseRevokers(credential: string, didDoc: DIDDocument, issuer: string): string[] {
